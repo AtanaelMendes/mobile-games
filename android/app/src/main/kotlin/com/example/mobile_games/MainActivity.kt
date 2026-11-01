@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -47,9 +49,17 @@ class MainActivity : FlutterActivity() {
     private var mirror = true
     private var active = false
     private var generation = 0
+    private val soundPool by lazy {
+        SoundPool.Builder().setMaxStreams(4).setAudioAttributes(
+            AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        ).build()
+    }
+    private val popSound by lazy { soundPool.load(this, R.raw.pop, 1) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        popSound
         flutterEngine.platformViewsController.registry.registerViewFactory(
             "mobile_games/camera_view", object : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
                 override fun create(context: android.content.Context, viewId: Int, args: Any?): PlatformView {
@@ -84,6 +94,10 @@ class MainActivity : FlutterActivity() {
                     "start" -> start(result)
                     "stop" -> {
                         stopCamera()
+                        result.success(null)
+                    }
+                    "playPop" -> {
+                        soundPool.play(popSound, 0.6f, 0.6f, 1, 0, 1f)
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -244,6 +258,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         stopCamera()
         executor.shutdown()
+        soundPool.release()
         super.onDestroy()
     }
 }

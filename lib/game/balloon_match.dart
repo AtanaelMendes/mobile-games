@@ -110,6 +110,7 @@ class BalloonMatch extends ChangeNotifier {
   final scores = {for (final id in PlayerId.values) id: 0};
   final balloons = <Balloon>[];
   final random = math.Random();
+  Size imageSize = const Size(16, 9);
   double remaining = 60;
   double elapsed = 0;
   double spawnClock = 0;
@@ -120,6 +121,7 @@ class BalloonMatch extends ChangeNotifier {
   VoidCallback? onPop;
 
   void accept(PoseFrame frame) {
+    imageSize = Size(frame.imageWidth.toDouble(), frame.imageHeight.toDouble());
     players[frame.player]!.accept(frame);
     if (pausedForTracking && players.values.every((p) => p.active)) {
       pausedForTracking = false;

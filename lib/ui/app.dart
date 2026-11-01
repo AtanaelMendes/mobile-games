@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
 
-import 'package:audioplayers/audioplayers.dart' hide PlayerState;
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -102,7 +102,6 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
   late final PoseSource source;
   late final BalloonMatch match;
   late final BalloonGame game;
-  final audio = AudioPlayer();
   StreamSubscription<PoseFrame>? subscription;
   PlayStage stage = PlayStage.preparation;
   String? error;
@@ -118,7 +117,9 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
     match = BalloonMatch(difficulty: widget.settings.difficulty);
     game = BalloonGame(match);
     match.onPop = () {
-      if (widget.settings.sound) audio.play(AssetSource('audio/pop.wav'));
+      if (widget.settings.sound && !source.simulated) {
+        methods.invokeMethod<void>('playPop');
+      }
     };
     match.addListener(_refresh);
     refreshTimer = Timer.periodic(const Duration(milliseconds: 150), (_) => _refresh());
@@ -171,7 +172,6 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
     source.dispose();
     match.removeListener(_refresh);
     match.dispose();
-    audio.dispose();
     super.dispose();
   }
 
@@ -255,14 +255,20 @@ class _GuidePainter extends CustomPainter {
   final bool debug;
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawLine(Offset(size.width / 2, 0), Offset(size.width / 2, size.height),
+    final scale = math.min(size.width / match.imageSize.width,
+        size.height / match.imageSize.height);
+    final imageHeight = match.imageSize.height * scale;
+    final top = (size.height - imageHeight) / 2;
+    canvas.drawLine(Offset(size.width / 2, top), Offset(size.width / 2, top + imageHeight),
       Paint()..color = const Color(0xBBFFFFFF)..strokeWidth = 2);
     if (!debug) return;
     for (final id in PlayerId.values) {
       final tracking = match.players[id]!;
       for (final point in tracking.smoothed.values) {
-        canvas.drawCircle(Offset((point.dx + id.index) * size.width / 2,
-            point.dy * size.height), 5, Paint()..color = id.index == 0
+        final imageWidth = match.imageSize.width * scale;
+        canvas.drawCircle(Offset((size.width - imageWidth) / 2 +
+            (point.dx + id.index) * imageWidth / 2,
+            top + point.dy * imageHeight), 5, Paint()..color = id.index == 0
                 ? const Color(0xFF58D5FF) : const Color(0xFFFF73B8));
       }
     }

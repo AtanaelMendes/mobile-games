@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   flame: 1.38.2
-  audioplayers: 6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -19,5 +18,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/audio/pop.wav

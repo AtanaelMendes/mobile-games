@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flame/game.dart';
 
@@ -22,10 +23,16 @@ class BalloonGame extends FlameGame {
     super.render(canvas);
     final w = size.x;
     final h = size.y;
+    final scale = math.min(w / match.imageSize.width, h / match.imageSize.height);
+    final displayW = match.imageSize.width * scale;
+    final displayH = match.imageSize.height * scale;
+    final left = (w - displayW) / 2;
+    final top = (h - displayH) / 2;
     final paint = Paint();
     for (final balloon in match.balloons) {
-      final center = Offset(balloon.position.dx * w, balloon.position.dy * h);
-      final radius = h * (balloon.popped ? 0.045 + balloon.popTime * 0.09 : 0.045);
+      final center = Offset(left + balloon.position.dx * displayW,
+          top + balloon.position.dy * displayH);
+      final radius = displayH * (balloon.popped ? 0.045 + balloon.popTime * 0.09 : 0.045);
       final base = balloon.player.index == 0
           ? const Color(0xFF58D5FF) : const Color(0xFFFF73B8);
       paint.color = base.withValues(alpha: balloon.popped

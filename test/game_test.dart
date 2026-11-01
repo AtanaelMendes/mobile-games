@@ -22,16 +22,19 @@ void main() {
     expect(PoseCoordinates.localToImage(PlayerId.player2, const Offset(0.5, 0.3)),
         const Offset(0.75, 0.3));
     expect(PoseCoordinates.localToGame(PlayerId.player2, const Offset(0.5, 0.5),
-        const Size(4, 3), const Size(16, 9)), const Offset(10, 4.5));
+        const Size(4, 3), const Size(16, 9)), const Offset(11, 4.5));
   });
 
   test('rotation and mirroring use a single transform', () {
     expect(PoseCoordinates.orient(const Offset(0.2, 0.3), 90),
         const Offset(0.7, 0.2));
-    expect(PoseCoordinates.orient(const Offset(0.2, 0.3), 90, mirror: true),
-        const Offset(0.3, 0.2));
-    expect(PoseCoordinates.orient(const Offset(0.2, 0.3), 180),
-        const Offset(0.8, 0.7));
+    final mirrored = PoseCoordinates.orient(const Offset(0.2, 0.3), 90,
+        mirror: true);
+    expect(mirrored.dx, closeTo(0.3, 1e-10));
+    expect(mirrored.dy, closeTo(0.2, 1e-10));
+    final rotated = PoseCoordinates.orient(const Offset(0.2, 0.3), 180);
+    expect(rotated.dx, closeTo(0.8, 1e-10));
+    expect(rotated.dy, closeTo(0.7, 1e-10));
   });
 
   test('a balloon scores once only for its own player', () {

@@ -13,11 +13,14 @@ class Joint {
 }
 
 class PoseFrame {
-  const PoseFrame(this.player, this.timestampMs, this.joints, this.processingMs);
+  const PoseFrame(this.player, this.timestampMs, this.joints, this.processingMs,
+      {this.imageWidth = 16, this.imageHeight = 9});
   final PlayerId player;
   final int timestampMs;
   final Map<int, Joint> joints;
   final double processingMs;
+  final int imageWidth;
+  final int imageHeight;
   bool get detected => joints.isNotEmpty;
 
   Joint? joint(int index, {double threshold = 0.55}) {
@@ -58,7 +61,9 @@ class NativePoseSource implements PoseSource {
         );
       }
       _controller.add(PoseFrame(player, (data['timestampMs'] as num).toInt(),
-          joints, (data['processingMs'] as num).toDouble()));
+          joints, (data['processingMs'] as num).toDouble(),
+          imageWidth: (data['width'] as num).toInt(),
+          imageHeight: (data['height'] as num).toInt()));
     }, onError: _controller.addError);
     await _methods.invokeMethod<void>('start');
   }
