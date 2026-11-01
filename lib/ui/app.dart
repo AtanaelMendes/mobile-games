@@ -269,7 +269,7 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
         icon: const Icon(Icons.arrow_back))),
       if (error != null) Center(child: Card(child: Padding(padding: const EdgeInsets.all(20),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Câmera indisponível ou permissão negada'), Text(error!),
+          const Text('Falha na câmera ou no detector de movimentos'), Text(error!),
           FilledButton(onPressed: _start, child: const Text('Tentar novamente')),
         ])))),
     ]));
@@ -458,3 +458,4 @@ class _CameraOption {
   final bool usable;
   double get angle => 2 * math.atan(field / 2) * 180 / math.pi;
 }
+

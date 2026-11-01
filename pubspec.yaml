@@ -1,7 +1,7 @@
 name: mobile_games
 description: Jogos de movimento locais para dois jogadores.
 publish_to: none
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
@@ -18,3 +18,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+

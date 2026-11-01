@@ -20,6 +20,30 @@ flutter build apk --debug
 
 O APK fica em `build/app/outputs/flutter-apk/app-debug.apk`. Para validar a lógica sem câmera, abra **Configurações**, ative **Modo simulado** e entre em **Balões**. Esse modo produz movimentos artificiais; não mede a câmera nem a inferência real.
 
+## APK por GitHub Actions e correção de release
+
+O workflow **Android APK** executa em pushes na `master` e também pode ser
+iniciado manualmente em **Actions → Android APK → Run workflow**. Ele executa
+análise, testes Dart, compilação release e um teste Android em emulador que
+inicializa o MediaPipe e processa duas imagens vazias sequencialmente. Esse teste
+exercita o detector no APK minificado; não valida movimentos de pessoas reais.
+Ao concluir com sucesso, o APK fica no artefato `mobile-games-release-<execução>`.
+A assinatura continua sendo a chave de debug conforme a configuração existente;
+essa compilação serve para instalação e teste, não para publicação na loja.
+
+O erro `Field platform_ ... not found` era causado pela remoção/renomeação de
+campos protobuf acessados por reflexão pelo MediaPipe no release. As regras em
+`android/app/proguard-rules.pro` preservam esses campos e são carregadas pelo
+build release. Não remova essas regras ao otimizar o APK.
+
+Para executar o teste de release localmente, após gerar o APK e iniciar um
+emulador ou conectar um Android de teste:
+
+```sh
+cd android
+./gradlew :app:connectedReleaseAndroidTest
+```
+
 ## Posicionamento e partida
 
 Fixe o celular na horizontal próximo à TV, com a câmera enquadrando as pessoas inteiras. Ao escolher um jogo, selecione **1 jogador** para usar a imagem e a tela inteiras, ou **2 jogadores** para dividir a imagem exibida: Jogador 1 à esquerda, Jogador 2 à direita. No modo de dois jogadores, cada pessoa deve permanecer em sua metade. Deixe somente uma pessoa em cada região. Não há troca automática de jogador ao atravessar a linha central.
@@ -76,3 +100,4 @@ Checklist em aparelho físico e TV:
 7. Espelhar manualmente na TV, observar enquadramento, latência e legibilidade dos placares. Medir fps e tempo de inferência na depuração.
 
 Fontes de implementação: [MediaPipe Pose Landmarker Android](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/android), [modelo lite](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/index), [CameraX ImageAnalysis](https://developer.android.com/media/camera/camerax/analyze) e [Flame](https://pub.dev/packages/flame).
+
