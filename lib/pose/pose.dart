@@ -31,6 +31,7 @@ class PoseFrame {
 
 abstract class PoseSource {
   Stream<PoseFrame> get frames;
+  Stream<String> get statuses;
   bool get simulated;
   Future<void> start();
   Future<void> stop();
@@ -41,16 +42,23 @@ class NativePoseSource implements PoseSource {
   static const _events = EventChannel('mobile_games/poses');
   static const _methods = MethodChannel('mobile_games/camera');
   final _controller = StreamController<PoseFrame>.broadcast();
+  final _statuses = StreamController<String>.broadcast();
   StreamSubscription<dynamic>? _subscription;
   @override
   bool get simulated => false;
   @override
   Stream<PoseFrame> get frames => _controller.stream;
+  @override
+  Stream<String> get statuses => _statuses.stream;
 
   @override
   Future<void> start() async {
     _subscription ??= _events.receiveBroadcastStream().listen((raw) {
       final data = Map<Object?, Object?>.from(raw as Map);
+      if (data['type'] == 'status') {
+        _statuses.add(data['message'] as String);
+        return;
+      }
       final player = data['player'] == 'player1' ? PlayerId.player1 : PlayerId.player2;
       final joints = <int, Joint>{};
       final values = Map<Object?, Object?>.from(data['joints'] as Map);
@@ -79,17 +87,21 @@ class NativePoseSource implements PoseSource {
   void dispose() {
     _subscription?.cancel();
     _controller.close();
+    _statuses.close();
   }
 }
 
 class SimulatedPoseSource implements PoseSource {
   final _controller = StreamController<PoseFrame>.broadcast();
+  final _statuses = StreamController<String>.broadcast();
   Timer? _timer;
   final Stopwatch _clock = Stopwatch();
   @override
   bool get simulated => true;
   @override
   Stream<PoseFrame> get frames => _controller.stream;
+  @override
+  Stream<String> get statuses => _statuses.stream;
 
   @override
   Future<void> start() async {
@@ -122,5 +134,6 @@ class SimulatedPoseSource implements PoseSource {
   void dispose() {
     _timer?.cancel();
     _controller.close();
+    _statuses.close();
   }
 }

@@ -25,8 +25,9 @@ class MobileGamesApp extends StatelessWidget {
 
 class GameSettings {
   bool simulated = false;
-  bool frontCamera = true;
-  bool mirror = true;
+  String? cameraId;
+  double zoom = 1;
+  bool mirror = false;
   bool sound = true;
   bool debug = false;
   double difficulty = 1;
@@ -70,8 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SwitchListTile(title: const Text('Modo simulado'),
             subtitle: const Text('Movimentos artificiais, sem rastreamento real'),
             value: settings.simulated, onChanged: (v) => refresh(() => settings.simulated = v)),
-          SwitchListTile(title: const Text('Câmera frontal'), value: settings.frontCamera,
-            onChanged: (v) => refresh(() => settings.frontCamera = v)),
+          const Text('Câmera e zoom podem ser escolhidos na preparação.'),
           SwitchListTile(title: const Text('Espelhar imagem'), value: settings.mirror,
             onChanged: (v) => refresh(() => settings.mirror = v)),
           SwitchListTile(title: const Text('Som'), value: settings.sound,
@@ -103,6 +103,8 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
   late final BalloonMatch match;
   late final BalloonGame game;
   StreamSubscription<PoseFrame>? subscription;
+  StreamSubscription<String>? statusSubscription;
+  String? cameraStatus;
   PlayStage stage = PlayStage.preparation;
   String? error;
   bool starting = false;
@@ -132,9 +134,13 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
     try {
       if (!source.simulated) {
         await methods.invokeMethod<void>('configure', {
-          'front': widget.settings.frontCamera, 'mirror': widget.settings.mirror,
+          'front': false, 'mirror': widget.settings.mirror,
+          'cameraId': widget.settings.cameraId, 'zoom': widget.settings.zoom,
         });
       }
+      statusSubscription ??= source.statuses.listen((status) {
+        if (mounted) setState(() => cameraStatus = status);
+      });
       subscription ??= source.frames.listen(match.accept, onError: (Object e) {
         if (mounted) setState(() => error = e.toString());
       });
@@ -168,6 +174,7 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     refreshTimer?.cancel();
     subscription?.cancel();
+    statusSubscription?.cancel();
     source.stop();
     source.dispose();
     match.removeListener(_refresh);
@@ -193,6 +200,12 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
           label: Text(stage == PlayStage.match ? '${match.remaining.ceil()} s' : 'Mobile Games')))),
       if (source.simulated) const Positioned(left: 12, bottom: 10,
           child: Chip(label: Text('MODO SIMULADO · sem câmera real'))),
+      if (cameraStatus != null && !source.simulated) Positioned(left: 170,
+        right: 170, top: 130, child: Center(child: Chip(label: Text(cameraStatus!)))),
+      if (!source.simulated && (stage == PlayStage.preparation ||
+          stage == PlayStage.calibration)) Positioned(top: 65, left: 0, right: 0,
+        child: Center(child: OutlinedButton.icon(onPressed: _openCameraPicker,
+          icon: const Icon(Icons.camera_alt), label: const Text('Escolher câmera e zoom')))),
       Positioned(left: 0, right: 0, bottom: 14, child: Center(child: _stagePanel(p1, p2))),
       Positioned(left: 8, top: 80, child: IconButton.filledTonal(
         tooltip: 'Voltar', onPressed: () => Navigator.pop(context),
@@ -213,8 +226,88 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
           Text(_stateLabel(tracking)),
           if (widget.settings.debug) Text('${tracking.fps.toStringAsFixed(1)} fps · '
               '${tracking.frame?.processingMs.toStringAsFixed(0) ?? '-'} ms · '
-              '${DateTime.now().millisecondsSinceEpoch - tracking.lastSeenMs} ms idade'),
+              '${DateTime.now().millisecondsSinceEpoch - tracking.lastSeenMs} ms idade · '
+              '${tracking.frame?.imageWidth ?? '-'}×${tracking.frame?.imageHeight ?? '-'}'),
         ]);
+
+  Future<void> _openCameraPicker() async {
+    try {
+      final raw = await methods.invokeListMethod<Map<dynamic, dynamic>>('listCameras');
+      if (!mounted) return;
+      final options = (raw ?? []).map((data) => _CameraOption(
+        data['id'] as String, data['facing'] as String,
+        (data['field'] as num).toDouble(), (data['minZoom'] as num).toDouble(),
+        (data['maxZoom'] as num).toDouble(), data['usable'] as bool,
+      )).toList();
+      if (options.isEmpty) throw StateError('Nenhuma câmera disponível');
+      var selectedId = widget.settings.cameraId ?? options.firstWhere(
+        (c) => c.usable && c.facing == 'back',
+        orElse: () => options.first,
+      ).id;
+      var zoom = widget.settings.zoom;
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (dialogContext) =>
+        StatefulBuilder(builder: (dialogContext, refresh) {
+          final chosen = options.firstWhere((c) => c.id == selectedId);
+          return AlertDialog(title: Text('Câmera e zoom · ${options.length} detectadas'),
+            content: SizedBox(width: 540, height: 460,
+              child: Column(children: [
+                const Text('Câmeras expostas ao aplicativo pelo Android. A lente 0,6× pode não aparecer nesta lista.'),
+                const SizedBox(height: 8),
+                Expanded(child: ListView(children: [for (final camera in options)
+                  ListTile(
+                    dense: true,
+                    enabled: camera.usable,
+                    selected: camera.id == selectedId,
+                    leading: Icon(camera.facing == 'front' ? Icons.camera_front : Icons.camera_rear),
+                    title: Text('${camera.facing == 'front' ? 'Frontal' : 'Traseira'} · ID ${camera.id}'),
+                    subtitle: Text('Ângulo horizontal ~${camera.angle.round()}° · zoom ${camera.minZoom.toStringAsFixed(1)}×–${camera.maxZoom.toStringAsFixed(1)}×${camera.usable ? '' : ' · indisponível para o jogo'}'),
+                    trailing: camera.id == selectedId ? const Icon(Icons.check_circle) : null,
+                    onTap: !camera.usable ? null : () async {
+                      refresh(() {
+                        selectedId = camera.id;
+                        zoom = 1.0.clamp(camera.minZoom, camera.maxZoom);
+                      });
+                      widget.settings.cameraId = camera.id;
+                      widget.settings.zoom = zoom;
+                      await methods.invokeMethod<void>('configure', {
+                        'front': camera.facing == 'front',
+                        'mirror': widget.settings.mirror,
+                        'cameraId': camera.id, 'zoom': zoom,
+                      });
+                    },
+                  ),
+                ])),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text('Zoom: ${zoom.toStringAsFixed(1)}×'),
+                  const SizedBox(width: 12),
+                  TextButton(onPressed: !chosen.usable ? null : () async {
+                    final actual = await methods.invokeMethod<double>('setZoom', {'zoom': 1.0});
+                    if (actual != null) {
+                      widget.settings.zoom = actual;
+                      refresh(() => zoom = actual);
+                    }
+                  }, child: const Text('Voltar a 1×')),
+                ]),
+                Slider(value: zoom.clamp(chosen.minZoom, chosen.maxZoom),
+                  min: chosen.minZoom, max: chosen.maxZoom,
+                  onChanged: chosen.usable ? (value) => refresh(() => zoom = value) : null,
+                  onChangeEnd: chosen.usable ? (value) async {
+                    final actual = await methods.invokeMethod<double>('setZoom', {'zoom': value});
+                    if (actual != null) {
+                      widget.settings.zoom = actual;
+                      refresh(() => zoom = actual);
+                    }
+                  } : null),
+              ])),
+            actions: [TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fechar'))],
+          );
+        }));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao listar câmeras: $e')));
+    }
+  }
 
   String _stateLabel(PlayerTracking p) {
     if (p.state == PlayerState.outside) { return 'Fora da área · volte à sua metade'; }
@@ -275,4 +368,16 @@ class _GuidePainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant _GuidePainter oldDelegate) => true;
+}
+
+class _CameraOption {
+  const _CameraOption(this.id, this.facing, this.field, this.minZoom,
+      this.maxZoom, this.usable);
+  final String id;
+  final String facing;
+  final double field;
+  final double minZoom;
+  final double maxZoom;
+  final bool usable;
+  double get angle => 2 * math.atan(field / 2) * 180 / math.pi;
 }
