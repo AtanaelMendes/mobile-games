@@ -27,7 +27,9 @@ iniciado manualmente em **Actions → Android APK → Run workflow**. Ele execut
 análise, testes Dart, compilação release e um teste Android em emulador que
 inicializa o MediaPipe e processa duas imagens vazias sequencialmente. Esse teste
 exercita o detector no APK minificado; não valida movimentos de pessoas reais.
-Ao concluir com sucesso, o APK fica no artefato `mobile-games-release-<execução>`.
+Após a compilação, o APK fica no artefato `mobile-games-release-<execução>`.
+Confira também o resultado do teste MediaPipe antes de considerar a validação
+completa; o artefato pode estar disponível mesmo se o teste falhar.
 A assinatura continua sendo a chave de debug conforme a configuração existente;
 essa compilação serve para instalação e teste, não para publicação na loja.
 
