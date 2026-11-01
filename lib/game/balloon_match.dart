@@ -132,7 +132,7 @@ class BalloonMatch extends ChangeNotifier {
     elapsed = 0;
     spawnClock = 0;
     balloons.clear();
-    scores.updateAll((_, __) => 0);
+    scores.updateAll((_, _) => 0);
     finished = false;
     pausedForTracking = false;
     running = true;
