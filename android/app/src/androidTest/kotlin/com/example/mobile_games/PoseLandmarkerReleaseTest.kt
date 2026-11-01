@@ -14,7 +14,7 @@ import org.junit.runner.RunWith
 /** Runs against the minified release APK, without camera or permission prompts. */
 @RunWith(AndroidJUnit4::class)
 class PoseLandmarkerReleaseTest {
-    @Test
+    @Test(timeout = 120000)
     fun initializesAndDetectsBothPlayerRegions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val options = PoseLandmarker.PoseLandmarkerOptions.builder()
