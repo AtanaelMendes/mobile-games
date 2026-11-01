@@ -7,6 +7,10 @@ import 'package:flutter/services.dart';
 
 import '../game/balloon_game.dart';
 import '../game/balloon_match.dart';
+import '../game/avatar_game.dart';
+import '../game/avatar_match.dart';
+import '../game/obstacle_game.dart';
+import '../game/obstacle_match.dart';
 import '../pose/pose.dart';
 
 class MobileGamesApp extends StatelessWidget {
@@ -49,19 +53,38 @@ class _HomeScreenState extends State<HomeScreen> {
         const Icon(Icons.sports_esports, size: 54, color: Color(0xFF58D5FF)),
         const Text('MOBILE GAMES', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold)),
         const SizedBox(height: 14),
-        const Text('Dois jogadores, uma câmera, muito movimento.'),
+        const Text('Uma câmera, muito movimento.'),
         const SizedBox(height: 30),
-        FilledButton.icon(onPressed: () => Navigator.push(context,
-          MaterialPageRoute<void>(builder: (_) => PlayScreen(settings: settings))),
+        FilledButton.icon(onPressed: () => _choosePlayers(GameMode.balloons),
           icon: const Icon(Icons.circle_outlined), label: const Text('Balões')),
         const SizedBox(height: 10),
-        const OutlinedButton(onPressed: null, child: Text('Corrida · Em breve')),
+        FilledButton.icon(onPressed: () => _choosePlayers(GameMode.avatar),
+          icon: const Icon(Icons.person), label: const Text('Avatar · Balões e bombas')),
+        const SizedBox(height: 10),
+        FilledButton.icon(onPressed: () => _choosePlayers(GameMode.obstacles),
+          icon: const Icon(Icons.grid_view), label: const Text('Desvio de obstáculos')),
         const SizedBox(height: 10),
         OutlinedButton.icon(onPressed: () => _settings(context),
           icon: const Icon(Icons.settings), label: const Text('Configurações')),
       ]),
     )),
   );
+
+  Future<void> _choosePlayers(GameMode mode) async {
+    final count = await showDialog<int>(context: context, builder: (context) =>
+      AlertDialog(title: const Text('Como quer jogar?'), content: Column(
+        mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.person), title: const Text('1 jogador'),
+            subtitle: const Text('Usar a tela inteira'),
+            onTap: () => Navigator.pop(context, 1)),
+          ListTile(leading: const Icon(Icons.people), title: const Text('2 jogadores'),
+            subtitle: const Text('Uma metade para cada jogador'),
+            onTap: () => Navigator.pop(context, 2)),
+        ])));
+    if (count == null || !mounted) return;
+    Navigator.push(context, MaterialPageRoute<void>(builder: (_) =>
+      PlayScreen(settings: settings, mode: mode, playerCount: count)));
+  }
 
   void _settings(BuildContext context) => showDialog<void>(context: context,
     builder: (context) => StatefulBuilder(builder: (context, refresh) => AlertDialog(
@@ -90,10 +113,14 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 enum PlayStage { preparation, calibration, match, result }
+enum GameMode { balloons, avatar, obstacles }
 
 class PlayScreen extends StatefulWidget {
-  const PlayScreen({super.key, required this.settings});
+  const PlayScreen({super.key, required this.settings, required this.mode,
+    required this.playerCount});
   final GameSettings settings;
+  final GameMode mode;
+  final int playerCount;
   @override
   State<PlayScreen> createState() => _PlayScreenState();
 }
@@ -101,7 +128,7 @@ class PlayScreen extends StatefulWidget {
 class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
   late final PoseSource source;
   late final BalloonMatch match;
-  late final BalloonGame game;
+  late final FlameGame game;
   StreamSubscription<PoseFrame>? subscription;
   StreamSubscription<String>? statusSubscription;
   String? cameraStatus;
@@ -115,14 +142,40 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    source = widget.settings.simulated ? SimulatedPoseSource() : NativePoseSource();
-    match = BalloonMatch(difficulty: widget.settings.difficulty);
-    game = BalloonGame(match);
+    source = widget.settings.simulated
+        ? SimulatedPoseSource(playerCount: widget.playerCount) : NativePoseSource();
+    match = switch (widget.mode) {
+      GameMode.avatar => AvatarMatch(difficulty: widget.settings.difficulty,
+          playerCount: widget.playerCount),
+      GameMode.obstacles => ObstacleMatch(difficulty: widget.settings.difficulty,
+          playerCount: widget.playerCount),
+      GameMode.balloons => BalloonMatch(difficulty: widget.settings.difficulty,
+          playerCount: widget.playerCount),
+    };
+    game = switch (widget.mode) {
+      GameMode.avatar => AvatarGame(match as AvatarMatch),
+      GameMode.obstacles => ObstacleGame(match as ObstacleMatch),
+      GameMode.balloons => BalloonGame(match),
+    };
     match.onPop = () {
       if (widget.settings.sound && !source.simulated) {
         methods.invokeMethod<void>('playPop');
       }
     };
+    if (match is AvatarMatch) {
+      (match as AvatarMatch).onBomb = () {
+        if (widget.settings.sound && !source.simulated) {
+          methods.invokeMethod<void>('playBomb');
+        }
+      };
+    }
+    if (match is ObstacleMatch) {
+      (match as ObstacleMatch).onCollision = () {
+        if (widget.settings.sound && !source.simulated) {
+          methods.invokeMethod<void>('playBomb');
+        }
+      };
+    }
     match.addListener(_refresh);
     refreshTimer = Timer.periodic(const Duration(milliseconds: 150), (_) => _refresh());
     _start();
@@ -136,6 +189,7 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
         await methods.invokeMethod<void>('configure', {
           'front': false, 'mirror': widget.settings.mirror,
           'cameraId': widget.settings.cameraId, 'zoom': widget.settings.zoom,
+          'playerCount': widget.playerCount,
         });
       }
       statusSubscription ??= source.statuses.listen((status) {
@@ -190,12 +244,15 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
       Positioned.fill(child: source.simulated
           ? const ColoredBox(color: Color(0xFF243445))
           : const AndroidView(viewType: 'mobile_games/camera_view')),
+      if (widget.mode != GameMode.balloons)
+        const Positioned.fill(child: ColoredBox(color: Color(0xFF243445))),
       Positioned.fill(child: IgnorePointer(child: GameWidget(game: game,
           backgroundBuilder: (_) => const SizedBox.expand()))),
       Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _GuidePainter(
           match, widget.settings.debug)))),
       Positioned(left: 14, top: 12, child: _score(1, p1, PlayerId.player1)),
-      Positioned(right: 14, top: 12, child: _score(2, p2, PlayerId.player2)),
+      if (widget.playerCount == 2)
+        Positioned(right: 14, top: 12, child: _score(2, p2, PlayerId.player2)),
       Positioned(top: 12, left: 0, right: 0, child: Center(child: Chip(
           label: Text(stage == PlayStage.match ? '${match.remaining.ceil()} s' : 'Mobile Games')))),
       if (source.simulated) const Positioned(left: 12, bottom: 10,
@@ -274,6 +331,7 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
                         'front': camera.facing == 'front',
                         'mirror': widget.settings.mirror,
                         'cameraId': camera.id, 'zoom': zoom,
+                        'playerCount': widget.playerCount,
                       });
                     },
                   ),
@@ -317,19 +375,36 @@ class _PlayScreenState extends State<PlayScreen> with WidgetsBindingObserver {
   }
 
   Widget _stagePanel(PlayerTracking p1, PlayerTracking p2) {
+    final avatarMode = widget.mode == GameMode.avatar;
+    final obstacleMode = widget.mode == GameMode.obstacles;
+    final solo = widget.playerCount == 1;
     if (stage == PlayStage.preparation) { return _panel(
-      'Fique em sua metade, com corpo e mãos visíveis.',
-      'Uma pessoa em cada região. Mantenha distância da linha central.',
+      obstacleMode ? 'Desvie dos blocos movendo o corpo para os lados.'
+          : avatarMode ? 'Movimente o corpo para os lados e controle seu boneco.'
+          : solo ? 'Fique diante da câmera, com corpo e mãos visíveis.'
+          : 'Fique em sua metade, com corpo e mãos visíveis.',
+      obstacleMode ? 'Partida de 2 minutos. Desvio: +1. Colisão: -2.'
+          : avatarMode ? 'Pegue balões e desvie das bombas (-3).'
+          : solo ? 'Você pode se mover por toda a tela.'
+          : 'Uma pessoa em cada região. Mantenha distância da linha central.',
       'Calibrar', () => setState(() => stage = PlayStage.calibration)); }
     if (stage == PlayStage.calibration) { return _panel(
-      'Calibração', 'Erga e mova as mãos para marcar o alcance de cada jogador.',
-      'Começar partida', p1.state == PlayerState.ready && p2.state == PlayerState.ready
+      'Calibração', avatarMode || obstacleMode
+          ? solo ? 'Mova o corpo para a esquerda e direita por toda a tela.'
+              : 'Movam o corpo para os lados dentro da própria metade.'
+          : solo ? 'Erga e mova as mãos para marcar seu alcance.'
+              : 'Ergam e movam as mãos para marcar o alcance de cada jogador.',
+      'Começar partida', p1.state == PlayerState.ready &&
+          (solo || p2.state == PlayerState.ready)
           ? () { match.begin(); setState(() => stage = PlayStage.match); } : null); }
     if (stage == PlayStage.result) { return _panel(match.winner,
-      'Jogador 1: ${match.scores[PlayerId.player1]} · Jogador 2: ${match.scores[PlayerId.player2]}',
+      solo ? 'Pontuação: ${match.scores[PlayerId.player1]}'
+          : 'Jogador 1: ${match.scores[PlayerId.player1]} · Jogador 2: ${match.scores[PlayerId.player2]}',
       'Jogar novamente', () => setState(() => stage = PlayStage.calibration)); }
     if (match.pausedForTracking) { return _panel('Partida pausada',
-        'Reposicionem-se nas próprias regiões para continuar.', 'Aguardando jogadores', null); }
+        solo ? 'Reposicione-se diante da câmera para continuar.'
+            : 'Reposicionem-se nas próprias regiões para continuar.',
+        solo ? 'Aguardando jogador' : 'Aguardando jogadores', null); }
     return const SizedBox.shrink();
   }
 
@@ -350,17 +425,19 @@ class _GuidePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final scale = math.min(size.width / match.imageSize.width,
         size.height / match.imageSize.height);
-    final imageHeight = match.imageSize.height * scale;
+    final imageHeight = match.playerCount == 1 ? size.height : match.imageSize.height * scale;
     final top = (size.height - imageHeight) / 2;
-    canvas.drawLine(Offset(size.width / 2, top), Offset(size.width / 2, top + imageHeight),
-      Paint()..color = const Color(0xBBFFFFFF)..strokeWidth = 2);
+    if (match.playerCount == 2) {
+      canvas.drawLine(Offset(size.width / 2, top), Offset(size.width / 2, top + imageHeight),
+        Paint()..color = const Color(0xBBFFFFFF)..strokeWidth = 2);
+    }
     if (!debug) return;
-    for (final id in PlayerId.values) {
+    for (final id in match.activePlayers) {
       final tracking = match.players[id]!;
       for (final point in tracking.smoothed.values) {
-        final imageWidth = match.imageSize.width * scale;
+        final imageWidth = match.playerCount == 1 ? size.width : match.imageSize.width * scale;
         canvas.drawCircle(Offset((size.width - imageWidth) / 2 +
-            (point.dx + id.index) * imageWidth / 2,
+            (point.dx + id.index) * imageWidth / match.playerCount,
             top + point.dy * imageHeight), 5, Paint()..color = id.index == 0
                 ? const Color(0xFF58D5FF) : const Color(0xFFFF73B8));
       }

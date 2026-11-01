@@ -24,8 +24,8 @@ class BalloonGame extends FlameGame {
     final w = size.x;
     final h = size.y;
     final scale = math.min(w / match.imageSize.width, h / match.imageSize.height);
-    final displayW = match.imageSize.width * scale;
-    final displayH = match.imageSize.height * scale;
+    final displayW = match.playerCount == 1 ? w : match.imageSize.width * scale;
+    final displayH = match.playerCount == 1 ? h : match.imageSize.height * scale;
     final left = (w - displayW) / 2;
     final top = (h - displayH) / 2;
     final paint = Paint();

@@ -1,6 +1,6 @@
 # Mobile Games
 
-Primeira versão Android de uma plataforma local de jogos de movimento para duas pessoas. O jogo **Balões** usa uma câmera do celular, duas regiões fixas de pose e a tela do aparelho ou seu espelhamento manual na TV. Não exige conta, servidor ou internet durante a partida.
+Plataforma Android de jogos de movimento para uma ou duas pessoas. **Balões**, **Avatar** e **Desvio de obstáculos** usam uma câmera do celular e a tela do aparelho ou seu espelhamento manual na TV. Não exige conta, servidor ou internet durante a partida.
 
 ## Preparação
 
@@ -22,24 +22,28 @@ O APK fica em `build/app/outputs/flutter-apk/app-debug.apk`. Para validar a lóg
 
 ## Posicionamento e partida
 
-Fixe o celular na horizontal próximo à TV, com a câmera enquadrando as duas pessoas inteiras. O Jogador 1 ocupa a metade esquerda da **imagem exibida** e o Jogador 2 a metade direita. Cada pessoa deve manter corpo e mãos dentro de sua metade. Deixe somente uma pessoa em cada região. Não há troca automática de jogador ao atravessar a linha central.
+Fixe o celular na horizontal próximo à TV, com a câmera enquadrando as pessoas inteiras. Ao escolher um jogo, selecione **1 jogador** para usar a imagem e a tela inteiras, ou **2 jogadores** para dividir a imagem exibida: Jogador 1 à esquerda, Jogador 2 à direita. No modo de dois jogadores, cada pessoa deve permanecer em sua metade. Deixe somente uma pessoa em cada região. Não há troca automática de jogador ao atravessar a linha central.
 
 No menu, entre em **Configurações** para ajustar o espelhamento. Na preparação ou calibração, toque em **Escolher câmera e zoom** para ver as câmeras que o Android expõe ao aplicativo, com ângulo horizontal estimado e faixa de zoom. Selecione uma lente e ajuste o zoom; **Voltar a 1×** restaura o enquadramento mais aberto dessa lente. A traseira principal em 1× vem selecionada. Ative o espelhamento da tela para TV nas configurações do próprio Android; o aplicativo não descobre TVs e não implementa transmissão. A compatibilidade e o atraso dependem do celular, da TV e do método de espelhamento. Chromecast e Miracast não são equivalentes.
 
-Abra **Balões**, conceda a permissão de câmera, alinhe os dois jogadores com a linha central e toque em **Calibrar**. Na calibração, erga e mova as mãos; a estimativa simples de alcance adapta a altura inicial dos balões. Quando ambos estiverem **Pronto**, inicie a partida. A rodada dura 60 segundos, mostra placares separados e pausa após perda persistente de rastreamento. Reposicione os dois jogadores para continuar. Cada balão vale um ponto para a pessoa de sua metade. É possível desligar o som e ajustar a dificuldade nas configurações.
+Abra **Balões**, escolha a quantidade de jogadores, conceda a permissão de câmera e toque em **Calibrar**. Na calibração, erga e mova as mãos; a estimativa simples de alcance adapta a altura inicial dos balões. Quando os participantes estiverem **Pronto**, inicie a partida. A rodada dura 60 segundos e pausa após perda persistente de rastreamento. Cada balão vale um ponto. É possível desligar o som e ajustar a dificuldade nas configurações.
 
-Ative **Depuração** para mostrar pontos usados para colisão, frequência de detecção, tempo de processamento e idade do último resultado por jogador. Os dados são estimativas e precisam ser medidos em aparelho real. **Corrida** aparece como “Em breve”.
+Em **Avatar**, cada pessoa controla um boneco pequeno ao deslocar o corpo para a esquerda ou direita. Em dupla, cada boneco permanece na própria metade; sozinho, usa a tela inteira. A câmera continua capturando os movimentos, mas a imagem não aparece: o jogo usa um fundo cinza como no modo simulado. O centro do corpo usa principalmente os quadris, com os ombros como alternativa. Os balões que atingem o boneco dão **+1 ponto**; bombas que o atingem tiram **3 pontos**, inclusive quando o placar fica negativo. A chuva acelera e fica mais frequente durante os 60 segundos. As bombas têm animação e som próprios; a opção **Som** também as silencia. Na calibração, mova o corpo lateralmente para conferir o controle antes de começar.
+
+Em **Desvio de obstáculos**, inspirado no visual dos jogos LCD de blocos, mova o corpo lateralmente para conduzir um carrinho pixelado e desviar dos blocos que descem. A câmera captura o movimento sem aparecer atrás da pista. Cada obstáculo ultrapassado dá **+1 ponto**; uma colisão tira **2 pontos**. A partida dura **2 minutos**, aceita um ou dois jogadores e aumenta gradualmente a velocidade. No modo individual, a pista usa a tela inteira. A detecção de posição usa os quadris e, quando necessário, os ombros.
+
+Ative **Depuração** para mostrar pontos usados para colisão, frequência de detecção, tempo de processamento e idade do último resultado por jogador. Os dados são estimativas e precisam ser medidos em aparelho real.
 
 ## Organização técnica
 
 - `lib/pose`: interface `PoseSource`, entrada nativa ou simulada e transformações de coordenadas.
-- `lib/game`: estado da partida, colisões de cabeça e punhos, pontuação e renderização dos balões com Flame.
+- `lib/game`: estado das partidas, colisões de cabeça e punhos no modo Balões, colisões do boneco com balões e bombas no modo Avatar, desvio de blocos, pontuação e renderização com Flame.
 - `lib/ui`: menu, configurações, preparação, calibração, partida e resultado.
-- `android/app/src/main/kotlin`: CameraX com prévia e análise preferencialmente em 16:9, `PreviewView` em `FIT_CENTER` e composição `COMPATIBLE` para manter os controles sobre o vídeo, uma captura, `ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST`, rotação e espelhamento antes de dois recortes verticais. A análise prefere 640×360 para reduzir o custo de inferência; o aparelho pode selecionar outra resolução compatível. Um detector MediaPipe leve processa cada recorte de forma sequencial, com uma pose máxima por recorte. Só coordenadas, confiança e métricas seguem pelo canal; os quadros ficam no Android.
+- `android/app/src/main/kotlin`: CameraX com prévia e análise preferencialmente em 16:9, `PreviewView` em `FIT_CENTER` e composição `COMPATIBLE` para manter os controles sobre o vídeo, uma captura, `ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST`, rotação e espelhamento. Em partida individual, o detector recebe a imagem inteira; em dupla, processa dois recortes verticais sequencialmente. A análise prefere 640×360 para reduzir o custo de inferência; o aparelho pode selecionar outra resolução compatível. Só coordenadas, confiança e métricas seguem pelo canal; os quadros ficam no Android.
 
 A transformação é: imagem bruta → imagem orientada → espelhamento configurado → recortes esquerdo/direito → coordenadas locais normalizadas → imagem exibida → área visível do jogo. O recorte direito acrescenta o deslocamento horizontal de meia imagem. A câmera inteira usa ajuste proporcional com margens em vez de cortar o corpo. A fonte simulada implementa a mesma interface da fonte real.
 
-O ponto de extensão para **Corrida** é a fonte comum de poses e os identificadores fixos `player1`/`player2`. A implementação futura deve manter pistas independentes, cenário da direita para a esquerda e calibrar posição em pé. O salto deve combinar deslocamento de quadris e pés com estado de aterrissagem e uma trava para impedir vários saltos no mesmo movimento.
+O antigo botão **Corrida** foi substituído pelo jogo de desvio de obstáculos conforme a nova regra do projeto.
 
 ## Limitações conhecidas
 
@@ -67,7 +71,7 @@ Checklist em aparelho físico e TV:
 2. Selecionar câmera frontal e traseira, com espelhamento ligado e desligado. Comparar movimento da mão na imagem e no ponto de depuração.
 3. Verificar a linha central, margens do vídeo e colisões nos quatro cantos de cada metade, em ambas as orientações horizontais.
 4. Retirar uma pessoa da própria metade e confirmar que ela deixa de pontuar. Testar pausa após perda prolongada e retomada com placares e tempo preservados.
-5. Testar movimentos rápidos de punho, colisão única por balão, placares independentes, som ligado/desligado e resultado após 60 segundos.
+5. Testar os três jogos em 1 e 2 jogadores. No modo individual, confirmar rastreamento e objetos por toda a largura. No modo Avatar, pegar balões (+1) e atingir bombas (-3). Em Desvio de obstáculos, ultrapassar blocos (+1), colidir (-2) e confirmar o fim após 2 minutos. Conferir colisões únicas, placares independentes, aumento da velocidade e pausa por perda de rastreamento.
 6. Colocar o app em segundo plano e voltar; conferir liberação e retomada da câmera.
 7. Espelhar manualmente na TV, observar enquadramento, latência e legibilidade dos placares. Medir fps e tempo de inferência na depuração.
 

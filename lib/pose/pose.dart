@@ -92,6 +92,8 @@ class NativePoseSource implements PoseSource {
 }
 
 class SimulatedPoseSource implements PoseSource {
+  SimulatedPoseSource({this.playerCount = 2});
+  final int playerCount;
   final _controller = StreamController<PoseFrame>.broadcast();
   final _statuses = StreamController<String>.broadcast();
   Timer? _timer;
@@ -108,15 +110,16 @@ class SimulatedPoseSource implements PoseSource {
     _clock.start();
     _timer ??= Timer.periodic(const Duration(milliseconds: 50), (_) {
       final t = _clock.elapsedMilliseconds;
-      for (final player in PlayerId.values) {
+      for (final player in PlayerId.values.take(playerCount)) {
         final phase = t / 420.0 + (player == PlayerId.player1 ? 0 : 2);
+        final bodyX = 0.5 + 0.25 * math.sin(phase * 0.35);
         final cx = 0.5 + 0.27 * math.sin(phase);
         final handY = 0.42 + 0.29 * math.cos(phase * 0.7);
         final joints = <int, Joint>{
-          0: const Joint(0.5, 0.20, 1),
-          11: const Joint(0.37, 0.44, 1), 12: const Joint(0.63, 0.44, 1),
+          0: Joint(bodyX, 0.20, 1),
+          11: Joint(bodyX - 0.13, 0.44, 1), 12: Joint(bodyX + 0.13, 0.44, 1),
           15: Joint(cx, handY, 1), 16: Joint(1 - cx, handY, 1),
-          23: const Joint(0.43, 0.76, 1), 24: const Joint(0.57, 0.76, 1),
+          23: Joint(bodyX - 0.07, 0.76, 1), 24: Joint(bodyX + 0.07, 0.76, 1),
         };
         _controller.add(PoseFrame(player, DateTime.now().millisecondsSinceEpoch,
             joints, 0));

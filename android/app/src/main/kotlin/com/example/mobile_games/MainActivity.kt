@@ -55,6 +55,7 @@ class MainActivity : FlutterActivity() {
     private var mirror = false
     private var selectedCameraId: String? = null
     private var requestedZoom = 1f
+    private var playerCount = 2
     private var activeCamera: Camera? = null
     private var active = false
     private var generation = 0
@@ -66,10 +67,12 @@ class MainActivity : FlutterActivity() {
         ).build()
     }
     private val popSound by lazy { soundPool.load(this, R.raw.pop, 1) }
+    private val bombSound by lazy { soundPool.load(this, R.raw.bomb, 1) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         popSound
+        bombSound
         flutterEngine.platformViewsController.registry.registerViewFactory(
             "mobile_games/camera_view", object : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
                 override fun create(context: android.content.Context, viewId: Int, args: Any?): PlatformView {
@@ -101,6 +104,7 @@ class MainActivity : FlutterActivity() {
                         mirror = call.argument<Boolean>("mirror") ?: false
                         selectedCameraId = call.argument<String>("cameraId")
                         requestedZoom = (call.argument<Double>("zoom") ?: 1.0).toFloat()
+                        playerCount = (call.argument<Int>("playerCount") ?: 2).coerceIn(1, 2)
                         if (active) bindCamera()
                         result.success(null)
                     }
@@ -116,6 +120,10 @@ class MainActivity : FlutterActivity() {
                     }
                     "playPop" -> {
                         soundPool.play(popSound, 0.6f, 0.6f, 1, 0, 1f)
+                        result.success(null)
+                    }
+                    "playBomb" -> {
+                        soundPool.play(bombSound, 0.8f, 0.8f, 1, 0, 1f)
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -251,9 +259,10 @@ class MainActivity : FlutterActivity() {
             }
             val half = display.width / 2
             val timestamp = System.currentTimeMillis()
-            for (region in 0..1) {
+            for (region in 0 until playerCount) {
                 val startNs = System.nanoTime()
-                val crop = Bitmap.createBitmap(display, region * half, 0,
+                val crop = if (playerCount == 1) display else Bitmap.createBitmap(
+                    display, region * half, 0,
                     if (region == 0) half else display.width - half, display.height)
                 val result = landmarker!!.detect(BitmapImageBuilder(crop).build())
                 val joints = HashMap<String, List<Float>>()
@@ -262,7 +271,7 @@ class MainActivity : FlutterActivity() {
                     val confidence = point.visibility().orElse(0f)
                     joints[index.toString()] = listOf(point.x(), point.y(), confidence)
                 }
-                crop.recycle()
+                if (crop !== display) crop.recycle()
                 val event = mapOf(
                     "player" to if (region == 0) "player1" else "player2",
                     "timestampMs" to timestamp,

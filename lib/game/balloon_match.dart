@@ -86,7 +86,7 @@ class PlayerTracking {
   bool get active => state == PlayerState.ready &&
       DateTime.now().millisecondsSinceEpoch - lastSeenMs < 280;
 
-  List<HitArea> hitAreas(PlayerId player) {
+  List<HitArea> hitAreas(PlayerId player, {int playerCount = 2}) {
     if (!active) return [];
     final shoulderA = frame?.joint(11);
     final shoulderB = frame?.joint(12);
@@ -95,17 +95,20 @@ class PlayerTracking {
     final handRadius = (width * 0.22).clamp(0.035, 0.09) / 2;
     final headRadius = (width * 0.32).clamp(0.05, 0.13) / 2;
     return [for (final entry in smoothed.entries)
-      HitArea(PoseCoordinates.localToImage(player, entry.value),
+      HitArea(playerCount == 1 ? entry.value : PoseCoordinates.localToImage(player, entry.value),
           entry.key == 0 ? headRadius : handRadius,
           previous[entry.key] == null ? null
-              : PoseCoordinates.localToImage(player, previous[entry.key]!))];
+              : playerCount == 1 ? previous[entry.key]!
+                  : PoseCoordinates.localToImage(player, previous[entry.key]!))];
   }
 }
 
 class BalloonMatch extends ChangeNotifier {
-  BalloonMatch({this.durationSeconds = 60, this.difficulty = 1});
+  BalloonMatch({this.durationSeconds = 60, this.difficulty = 1, this.playerCount = 2});
   final int durationSeconds;
   final double difficulty;
+  final int playerCount;
+  Iterable<PlayerId> get activePlayers => PlayerId.values.take(playerCount);
   final players = {for (final id in PlayerId.values) id: PlayerTracking()};
   final scores = {for (final id in PlayerId.values) id: 0};
   final balloons = <Balloon>[];
@@ -123,7 +126,7 @@ class BalloonMatch extends ChangeNotifier {
   void accept(PoseFrame frame) {
     imageSize = Size(frame.imageWidth.toDouble(), frame.imageHeight.toDouble());
     players[frame.player]!.accept(frame);
-    if (pausedForTracking && players.values.every((p) => p.active)) {
+    if (pausedForTracking && activePlayers.every((id) => players[id]!.active)) {
       pausedForTracking = false;
     }
     notifyListeners();
@@ -144,7 +147,7 @@ class BalloonMatch extends ChangeNotifier {
   void update(double dt) {
     if (!running || finished) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (players.values.any((p) => now - p.lastSeenMs > 1500)) {
+    if (activePlayers.any((id) => now - players[id]!.lastSeenMs > 1500)) {
       pausedForTracking = true;
     }
     if (pausedForTracking) return;
@@ -162,9 +165,10 @@ class BalloonMatch extends ChangeNotifier {
     final interval = (1.5 / difficulty - elapsed * 0.006).clamp(0.5, 1.8);
     if (spawnClock >= interval) {
       spawnClock = 0;
-      for (final player in PlayerId.values) {
+      for (final player in activePlayers) {
         final tracking = players[player]!;
-        final x = (player == PlayerId.player1 ? 0 : 0.5) + 0.08 + random.nextDouble() * 0.34;
+        final laneWidth = 1.0 / playerCount;
+        final x = player.index * laneWidth + laneWidth * (0.16 + random.nextDouble() * 0.68);
         final startY = tracking.minReachY.clamp(0.05, 0.30) - 0.08;
         balloons.add(Balloon(nextId++, player, Offset(x, startY),
             (0.10 + elapsed * 0.0018) * difficulty));
@@ -176,7 +180,8 @@ class BalloonMatch extends ChangeNotifier {
         continue;
       }
       balloon.position += Offset(0, balloon.speed * dt);
-      for (final hit in players[balloon.player]!.hitAreas(balloon.player)) {
+      for (final hit in players[balloon.player]!.hitAreas(balloon.player,
+          playerCount: playerCount)) {
         if (_distanceToSegment(balloon.position, hit.previous ?? hit.center,
                 hit.center) < hit.radius + 0.022) {
           pop(balloon, balloon.player);
@@ -198,6 +203,7 @@ class BalloonMatch extends ChangeNotifier {
   }
 
   String get winner {
+    if (playerCount == 1) return 'Fim de partida!';
     final left = scores[PlayerId.player1]!;
     final right = scores[PlayerId.player2]!;
     return left == right ? 'Empate!' : left > right ? 'Jogador 1 venceu!' : 'Jogador 2 venceu!';
